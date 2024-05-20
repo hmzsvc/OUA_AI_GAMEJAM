@@ -1,0 +1,96 @@
+using Unity.MLAgents;
+using Unity.MLAgents.Sensors;
+using Unity.MLAgents.Actuators;
+using UnityEngine;
+using UnityEngine.UI;
+public class TimeCollectingAgent : Agent
+{
+	// Kapı prefab
+    public Transform doorPrefab;
+	// Zaman sembolü prefab'ı
+    public Transform timeSymbolPrefab;
+    public Text timerText;
+    public float timeRemaining = 180.0f;
+    private Rigidbody2D rb;
+    private Transform currentDoor;
+    void Start()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        ResetTimer();
+    }
+    public override void OnEpisodeBegin()
+    {
+        // Ajanın pozisyonunu ve zamanı sıfırla
+        transform.position = Vector3.zero;
+        ResetTimer();
+        // Eski kapı ve zaman sembollerini temizle
+        if (currentDoor != null)
+        {
+            Destroy(currentDoor.gameObject);
+        }
+        GameObject[] existingTimeSymbols = GameObject.FindGameObjectsWithTag("TimeSymbol");
+        foreach (GameObject symbol in existingTimeSymbols)
+        {
+            Destroy(symbol);
+        }
+        // Yeni kapı oluşturması geerekiyor
+        Vector2 doorPosition = new Vector2(Random.Range(-10f, 10f), Random.Range(-4f, 4f));
+        currentDoor = Instantiate(doorPrefab, doorPosition, Quaternion.identity);
+        // Yeni zaman sembolleri oluşturup rastegele yerleştirmesi gerekiyor
+	// koyduğun zaman sembollerine göre sayıyı revize edebiliriz
+        int numberOfSymbols = 5;
+        for (int i = 0; i < numberOfSymbols; i++)
+        {
+            Vector2 symbolPosition = new Vector2(Random.Range(-8f, 8f), Random.Range(-4f, 4f));
+            Instantiate(timeSymbolPrefab, symbolPosition, Quaternion.identity);
+        }
+    }
+    public override void CollectObservations(VectorSensor sensor)
+    {
+        sensor.AddObservation(transform.position);
+        sensor.AddObservation(currentDoor.position);
+    }
+    public override void OnActionReceived(ActionBuffers actionBuffers)
+    {
+        // sağa sola hareket sağlamalı
+        float moveX = actionBuffers.ContinuousActions[0];
+        float moveY = actionBuffers.ContinuousActions[1];
+        rb.velocity = new Vector2(moveX, moveY) * 5.0f;
+        // Zamanı güncelleme
+        timeRemaining -= Time.deltaTime;
+        timerText.text = "Time: " + Mathf.FloorToInt(timeRemaining).ToString();
+        // Zaman dolarsa bölümü yeniden başlatır
+        if (timeRemaining <= 0)
+        {
+            SetReward(-1.0f);
+            EndEpisode();
+        }
+    }
+    public override void Heuristic(in ActionBuffers actionsOut)
+    {
+        var continuousActions = actionsOut.ContinuousActions;
+        continuousActions[0] = Input.GetAxis("Horizontal");
+        continuousActions[1] = Input.GetAxis("Vertical");
+    }
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        // Zaman sembolünü toplarsa süre ekler
+        if (other.gameObject.CompareTag("TimeSymbol"))
+        {
+	//eklenen süre az ya da çok gelirse değiştirilebilir
+            timeRemaining += 10.0f;
+            Destroy(other.gameObject);
+        }
+        // Kapıya ulaşıldığında ödül ver ve bölümü bitir
+	//ulaşılan yerin tagini door yaptım ama kodlarken yaptığın tag olabilir
+        else if (other.gameObject.CompareTag("Door"))
+        {
+            SetReward(1.0f);
+            EndEpisode();
+        }
+    }
+    void ResetTimer()
+    {
+        timeRemaining = 180.0f;
+    }
+}
